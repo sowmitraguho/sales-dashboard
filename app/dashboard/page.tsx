@@ -1,8 +1,12 @@
 'use client';
 import React, { useState, useCallback, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
 import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Calendar, Loader2 } from 'lucide-react';
 import { useDashboard } from './context';
+import { SalesChart } from '@/components/SalesChart/SalesChart';
+import { DataTable } from '@/components/DataTable/DataTable';
+import { Pagination } from '@/components/Pagination/Pagination';
+//import { SalesChart } from '../components/SalesChart/SalesChart';
 
 interface SalesItem {
     id: string;
@@ -46,9 +50,9 @@ export default function SalesDashboard() {
     // Pagination State
     const [afterToken, setAfterToken] = useState<string>('');
     const [beforeToken, setBeforeToken] = useState<string>('');
-    const [hasNextPage, setHasNextPage] = useState(true);
-    const [hasPrevPage, setHasPrevPage] = useState(true);
-    const [pageStack, setPageStack] = useState<string[]>(['']);
+    const [hasNextPage, setHasNextPage] = useState<number>(1);
+    const [hasPrevPage, setHasPrevPage] = useState<number>(0);
+    const [page, setPage] = useState<number>(1);
 
     // Sorting State
     const [sortBy, setSortBy] = useState<'date' | 'price'>('date');
@@ -87,31 +91,32 @@ export default function SalesDashboard() {
                 }
 
                 const result: ApiResponse = await res.json();
-                console.log(result);
+                console.log('fetchSalesData',result.pagination);
                 setTableData(result.results.Sales);
-                let totalSales = result.results.TotalSales.totalSale;
+                let totalSalesNumber : number = result.results.Sales.length;
+                console.log(totalSalesNumber);
+                setHasNextPage(totalSalesNumber == 50 ? 1 : 0);
+                //setHasPrevPage(page > 1 ? 1 : 0);
                 setAfterToken(result.pagination.after || '');
-                setBeforeToken(result.pagination.before || '');
-                // setHasNextPage(result.pagination.hasNextPage);
-                // setHasPrevPage(result.pagination.hasPrevPage);
+                setBeforeToken(result.pagination.before || '' );
 
                 // Generate chart data from fetched data
-                // const dailyTotals: { [key: string]: number } = {};
-                // result.data.forEach((item) => {
-                //   if (!dailyTotals[item.date]) {
-                //     dailyTotals[item.date] = 0;
-                //   }
-                //   dailyTotals[item.date] += item.price;
-                // });
+                const dailyTotals: { [key: string]: number } = {};
+                result.results.Sales.forEach((item) => {
+                  if (!dailyTotals[item.date]) {
+                    dailyTotals[item.date] = 0;
+                  }
+                  dailyTotals[item.date] += item.price;
+                });
 
-                // const chartDataArray = Object.entries(dailyTotals)
-                //   .map(([date, total]) => ({
-                //     date,
-                //     total: parseFloat(total.toFixed(2)),
-                //   }))
-                //   .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-                // setChartData(chartDataArray);
+                const chartDataArray = Object.entries(dailyTotals)
+                  .map(([date, total]) => ({
+                    date,
+                    total: parseFloat(total.toFixed(2)),
+                  }))
+                  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                  //console.log(chartDataArray);
+                setChartData(chartDataArray);
             } catch (err) {
                 console.error('Error fetching sales data:', err);
                 setError('Failed to fetch sales data. Please try again.');
@@ -124,27 +129,27 @@ export default function SalesDashboard() {
 
     // Reset pagination and fetch when filters change
     useEffect(() => {
-        setPageStack(['']);
+        setPage(1);
         setAfterToken('');
         setBeforeToken('');
         fetchSalesData('', '');
-    }, [startDate, endDate, minPrice, email, phone, sortBy, sortOrder, fetchSalesData]);
+    }, [startDate, endDate, minPrice, email, phone, sortBy, sortOrder]);
 
     // Handle next page
     const handleNextPage = () => {
         if (afterToken) {
-            setPageStack([...pageStack, afterToken]);
+            setPage(page + 1);
+            setHasPrevPage(page);
             fetchSalesData(afterToken, '');
         }
     };
 
     // Handle previous page
     const handlePrevPage = () => {
-        if (pageStack.length > 1) {
-            const newStack = pageStack.slice(0, -1);
-            setPageStack(newStack);
-            const previousToken = newStack[newStack.length - 1];
-            fetchSalesData('', previousToken);
+        if (page > 1) {
+            setHasPrevPage(page-2);
+            fetchSalesData('', beforeToken);
+            setPage(page - 1);
         }
     };
 
@@ -166,7 +171,7 @@ export default function SalesDashboard() {
         >
             {sortBy === column && sortOrder === 'asc' && <ChevronUp size={16} />}
             {sortBy === column && sortOrder === 'desc' && <ChevronDown size={16} />}
-            {sortBy !== column && <ChevronUp size={16} className="opacity-30 hover:opacity-100" />}
+            {sortBy !== column && <ChevronUp size={16} className="opacity-70 hover:opacity-100" />}
         </button>
     );
 
@@ -270,43 +275,7 @@ export default function SalesDashboard() {
 
 
                 {/* Chart Card */}
-                {/* <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">Sales Over Time</h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Daily total sales in your selected date range
-            </p>
-          </div>
-          <div className="p-6">
-            {loading && chartData.length === 0 ? (
-              <div className="h-80 flex items-center justify-center text-slate-500">
-                <Loader2 className="animate-spin mr-2" size={20} />
-                Loading chart...
-              </div>
-            ) : chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#3b82f6"
-                    name="Total Sales"
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-80 flex items-center justify-center text-slate-500">
-                No data available for the selected filters
-              </div>
-            )}
-          </div>
-        </div> */}
+                <SalesChart chartData={chartData} loading={loading} />
 
                 {/* Table Card */}
                 <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
@@ -324,82 +293,11 @@ export default function SalesDashboard() {
                         )}
 
                         <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-slate-200 bg-slate-50">
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase tracking-wider">
-                                            Date
-                                            <SortIcon column="date" />
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase tracking-wider">
-                                            Customer Email
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase tracking-wider">
-                                            Customer Phone
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase tracking-wider">
-                                            Price
-                                            <SortIcon column="price" />
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {loading && tableData.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                                                <Loader2 className="animate-spin inline-block mr-2" size={18} />
-                                                Loading data...
-                                            </td>
-                                        </tr>
-                                    ) : tableData.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                                                No sales data found
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        tableData.map((item) => (
-                                            <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50">
-                                                <td className="px-6 py-4 font-medium text-slate-900">
-                                                    {new Date(item.date).toISOString().split("T")[0]}
-                                                </td>
-
-                                                <td className="px-6 py-4 text-sm text-slate-600">{item.customerEmail}</td>
-                                                <td className="px-6 py-4 text-sm text-slate-600">{item.customerPhone}</td>
-                                                <td className="px-6 py-4 font-semibold text-green-600">
-                                                    ${item.price.toFixed(2)}
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                            <DataTable tableData={tableData} loading={loading} page={page} SortIcon={SortIcon} />
                         </div>
 
                         {/* Pagination */}
-                        <div className="mt-6 flex items-center justify-between">
-                            <div className="text-sm text-slate-600">
-                                Page {pageStack.length} • Showing {tableData.length} items
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={handlePrevPage}
-                                    disabled={!hasPrevPage || loading}
-                                    className="inline-flex items-center gap-1 px-4 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <ChevronLeft size={18} />
-                                    Previous
-                                </button>
-                                <button
-                                    onClick={handleNextPage}
-                                    disabled={!hasNextPage || loading}
-                                    className="inline-flex items-center gap-1 px-4 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    Next
-                                    <ChevronRight size={18} />
-                                </button>
-                            </div>
-                        </div>
+                        <Pagination page={page} tableData={tableData} loading={loading} handlePrevPage={handlePrevPage} handleNextPage={handleNextPage} hasNextPage={hasNextPage} hasPrevPage={hasPrevPage} />
                     </div>
                 </div>
             </div>
