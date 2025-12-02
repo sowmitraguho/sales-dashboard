@@ -145,9 +145,9 @@ export default function SalesDashboard() {
     // Handle previous page
     const handlePrevPage = () => {
         if (page > 1) {
-            setHasPrevPage(page - 2);
+            setHasPrevPage(0);
             fetchSalesData('', beforeToken);
-            setPage(page - 1);
+            setPage(1);
         }
     };
 
